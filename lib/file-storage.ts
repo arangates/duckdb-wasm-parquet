@@ -4,7 +4,7 @@ const DB_NAME = "parquet-viewer-db"
 const STORE_NAME = "parquet-files"
 const DB_VERSION = 1
 
-interface StoredFile {
+export interface StoredFile {
   id: string
   name: string
   size: number
@@ -75,4 +75,12 @@ export async function deleteFile(id: string): Promise<void> {
 export async function clearAllFiles(): Promise<void> {
   const db = await getDB()
   await db.clear(STORE_NAME)
+}
+
+export const fileStorage = {
+  saveFile,
+  getFile,
+  getAllFiles,
+  deleteFile,
+  clearAllFiles,
 }

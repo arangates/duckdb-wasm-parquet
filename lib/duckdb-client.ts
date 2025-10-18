@@ -71,3 +71,11 @@ export function closeDuckDB() {
     db = null
   }
 }
+
+export async function getDuckDBConnection() {
+  if (!connection) {
+    const { connection: conn } = await initializeDuckDB()
+    return conn
+  }
+  return connection
+}

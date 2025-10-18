@@ -1,7 +1,17 @@
 "use client"
 
 import type * as React from "react"
-import { IconDatabase, IconSettings, IconHelp, IconCommand, IconBrandGithub } from "@tabler/icons-react"
+import {
+  IconDatabase,
+  IconSettings,
+  IconHelp,
+  IconCommand,
+  IconBrandGithub,
+  IconFileAnalytics,
+  IconChartLine,
+  IconFileExport,
+  IconGitMerge,
+} from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
@@ -27,6 +37,31 @@ const data = {
       title: "Parquet Viewer",
       url: "/parquet-viewer",
       icon: IconDatabase,
+    },
+    {
+      title: "Query Builder",
+      url: "/query-builder",
+      icon: IconCommand,
+    },
+    {
+      title: "Data Profiling",
+      url: "/data-profiling",
+      icon: IconFileAnalytics,
+    },
+    {
+      title: "Multi-File Analysis",
+      url: "/multi-file",
+      icon: IconGitMerge,
+    },
+    {
+      title: "Visualizations",
+      url: "/visualizations",
+      icon: IconChartLine,
+    },
+    {
+      title: "Export & Share",
+      url: "/export",
+      icon: IconFileExport,
     },
   ],
   navSecondary: [
