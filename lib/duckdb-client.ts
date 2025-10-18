@@ -37,7 +37,7 @@ export async function loadParquetFile(file: File) {
   await db!.registerFileBuffer(file.name, new Uint8Array(buffer))
 
   // Create a table from the parquet file
-  await connection.query(`CREATE OR REPLACE TABLE taxi_data AS SELECT * FROM read_parquet('${file.name}')`)
+  await connection.query(`CREATE OR REPLACE TABLE parquet_data AS SELECT * FROM read_parquet('${file.name}')`)
 
   return connection
 }
@@ -52,12 +52,12 @@ export async function executeQuery(query: string) {
 }
 
 export async function getTableSchema() {
-  const result = await executeQuery(`DESCRIBE taxi_data`)
+  const result = await executeQuery(`DESCRIBE parquet_data`)
   return result
 }
 
 export async function getRowCount() {
-  const result = await executeQuery(`SELECT COUNT(*) as count FROM taxi_data`)
+  const result = await executeQuery(`SELECT COUNT(*) as count FROM parquet_data`)
   return result[0].count
 }
 

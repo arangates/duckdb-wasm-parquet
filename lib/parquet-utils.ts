@@ -54,7 +54,7 @@ export async function calculateStatsFromDB(connection: AsyncDuckDBConnection): P
         AVG(COALESCE(total_amount, fare_amount, 0)) as averageFare,
         AVG(COALESCE(trip_distance, 0)) as averageDistance,
         AVG(COALESCE(passenger_count, 0)) as averagePassengers
-      FROM taxi_data
+      FROM parquet_data
     `
 
     const result = await connection.query(statsQuery)
@@ -65,11 +65,11 @@ export async function calculateStatsFromDB(connection: AsyncDuckDBConnection): P
       WITH half_data AS (
         SELECT 
           CASE 
-            WHEN ROW_NUMBER() OVER () <= (SELECT COUNT(*) / 2 FROM taxi_data) THEN 'first'
+            WHEN ROW_NUMBER() OVER () <= (SELECT COUNT(*) / 2 FROM parquet_data) THEN 'first'
             ELSE 'second'
           END as half,
           COALESCE(total_amount, fare_amount, 0) as revenue
-        FROM taxi_data
+        FROM parquet_data
       )
       SELECT 
         half,
@@ -130,7 +130,7 @@ export async function generateTrendDataFromDB(connection: AsyncDuckDBConnection,
     for (const col of dateColumns) {
       try {
         // Test if column exists
-        await connection.query(`SELECT ${col} FROM taxi_data LIMIT 1`)
+        await connection.query(`SELECT ${col} FROM parquet_data LIMIT 1`)
 
         trendQuery = `
           SELECT 
@@ -138,7 +138,7 @@ export async function generateTrendDataFromDB(connection: AsyncDuckDBConnection,
             COUNT(*) as trips,
             SUM(COALESCE(total_amount, fare_amount, 0)) as revenue,
             AVG(COALESCE(total_amount, fare_amount, 0)) as avgFare
-          FROM taxi_data
+          FROM parquet_data
           WHERE ${col} IS NOT NULL
           GROUP BY DATE_TRUNC('day', ${col}::TIMESTAMP)
           ORDER BY date

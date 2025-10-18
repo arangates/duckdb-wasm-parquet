@@ -7,13 +7,19 @@ import {
   IconChevronRight,
   IconChevronsLeft,
   IconChevronsRight,
+  IconLayoutColumns,
   IconSearch,
+  IconSelector,
+  IconSortAscending,
+  IconSortDescending,
 } from "@tabler/icons-react"
 import {
   type ColumnDef,
   type ColumnFiltersState,
   flexRender,
   getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
@@ -33,13 +39,20 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { formatCurrency, type TaxiRecord } from "@/lib/parquet-utils"
+import { formatCurrency } from "@/lib/parquet-utils"
+import type { AsyncDuckDBConnection } from "@duckdb/duckdb-wasm"
 
 interface ParquetDataTableProps {
-  data: TaxiRecord[]
+  connection: AsyncDuckDBConnection
 }
 
-export function ParquetDataTable({ data }: ParquetDataTableProps) {
+type ParquetRecord = Record<string, any>
+
+export function ParquetDataTable({ connection }: ParquetDataTableProps) {
+  const [data, setData] = React.useState<ParquetRecord[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+
   const [rowSelection, setRowSelection] = React.useState({})
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -48,15 +61,42 @@ export function ParquetDataTable({ data }: ParquetDataTableProps) {
     pageIndex: 0,
     pageSize: 10,
   })
+  const [globalFilter, setGlobalFilter] = React.useState("")
 
-  // Dynamically generate columns based on the first record
-  const columns = React.useMemo<ColumnDef<TaxiRecord>[]>(() => {
+  React.useEffect(() => {
+    async function loadData() {
+      try {
+        setLoading(true)
+        setError(null)
+        console.log("[v0] Loading data from parquet_data table...")
+
+        // Fetch first 1000 rows for the table
+        const result = await connection.query(`
+          SELECT * FROM parquet_data 
+          LIMIT 1000
+        `)
+
+        const rows = result.toArray().map((row) => row.toJSON())
+        console.log("[v0] Loaded", rows.length, "rows")
+        setData(rows)
+      } catch (err) {
+        console.error("[v0] Error loading table data:", err)
+        setError(err instanceof Error ? err.message : "Failed to load data")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [connection])
+
+  const columns = React.useMemo<ColumnDef<ParquetRecord>[]>(() => {
     if (!data || data.length === 0) return []
 
     const firstRecord = data[0]
     const keys = Object.keys(firstRecord)
 
-    const dynamicColumns: ColumnDef<TaxiRecord>[] = [
+    const dynamicColumns: ColumnDef<ParquetRecord>[] = [
       {
         id: "select",
         header: ({ table }) => (
@@ -82,14 +122,31 @@ export function ParquetDataTable({ data }: ParquetDataTableProps) {
       },
     ]
 
-    // Add columns for each key in the data
+    // Add columns for each key in the data with enhanced features
     keys.forEach((key) => {
       dynamicColumns.push({
         accessorKey: key,
-        header: key
-          .split("_")
-          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(" "),
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+              className="-ml-4 h-8 data-[state=open]:bg-accent"
+            >
+              {key
+                .split("_")
+                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(" ")}
+              {column.getIsSorted() === "asc" ? (
+                <IconSortAscending className="ml-2 size-4" />
+              ) : column.getIsSorted() === "desc" ? (
+                <IconSortDescending className="ml-2 size-4" />
+              ) : (
+                <IconSelector className="ml-2 size-4" />
+              )}
+            </Button>
+          )
+        },
         cell: ({ row }) => {
           const value = row.getValue(key)
 
@@ -125,6 +182,8 @@ export function ParquetDataTable({ data }: ParquetDataTableProps) {
 
           return <div className="truncate max-w-[200px]">{String(value)}</div>
         },
+        enableColumnFilter: true,
+        filterFn: "includesString",
       })
     })
 
@@ -140,6 +199,7 @@ export function ParquetDataTable({ data }: ParquetDataTableProps) {
       rowSelection,
       columnFilters,
       pagination,
+      globalFilter,
     },
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
@@ -147,17 +207,32 @@ export function ParquetDataTable({ data }: ParquetDataTableProps) {
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
+    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
+    enableMultiSort: true,
   })
 
-  const firstColumnKey = React.useMemo(() => {
-    if (!data || data.length === 0) return null
-    const keys = Object.keys(data[0])
-    return keys.length > 0 ? keys[0] : null
-  }, [data])
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 px-4 py-12 lg:px-6">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <p className="text-muted-foreground text-center">Loading data...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 px-4 py-12 lg:px-6">
+        <p className="text-destructive text-center">Error: {error}</p>
+      </div>
+    )
+  }
 
   if (!data || data.length === 0) {
     return (
@@ -175,19 +250,19 @@ export function ParquetDataTable({ data }: ParquetDataTableProps) {
             <IconSearch className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
             <Input
               placeholder="Search all columns..."
-              value={(firstColumnKey ? (table.getColumn(firstColumnKey)?.getFilterValue() as string) : "") ?? ""}
-              onChange={(event) =>
-                firstColumnKey && table.getColumn(firstColumnKey)?.setFilterValue(event.target.value)
-              }
+              value={globalFilter ?? ""}
+              onChange={(event) => setGlobalFilter(event.target.value)}
               className="pl-8"
-              disabled={!firstColumnKey}
             />
           </div>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
-              Columns <IconChevronDown />
+              <IconLayoutColumns />
+              <span className="hidden lg:inline">Customize Columns</span>
+              <span className="lg:hidden">Columns</span>
+              <IconChevronDown />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
@@ -219,20 +294,7 @@ export function ParquetDataTable({ data }: ParquetDataTableProps) {
                   {headerGroup.headers.map((header) => {
                     return (
                       <TableHead key={header.id} colSpan={header.colSpan}>
-                        {header.isPlaceholder ? null : (
-                          <Button
-                            variant="ghost"
-                            onClick={() => header.column.toggleSorting(header.column.getIsSorted() === "asc")}
-                            className="-ml-4 h-8"
-                          >
-                            {flexRender(header.column.columnDef.header, header.getContext())}
-                            {header.column.getIsSorted() === "asc"
-                              ? " ↑"
-                              : header.column.getIsSorted() === "desc"
-                                ? " ↓"
-                                : ""}
-                          </Button>
-                        )}
+                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                       </TableHead>
                     )
                   })}
@@ -260,7 +322,7 @@ export function ParquetDataTable({ data }: ParquetDataTableProps) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-4">
         <div className="text-muted-foreground hidden flex-1 text-sm lg:flex">
           {table.getFilteredSelectedRowModel().rows.length} of {table.getFilteredRowModel().rows.length} row(s)
           selected.
@@ -280,7 +342,7 @@ export function ParquetDataTable({ data }: ParquetDataTableProps) {
                 <SelectValue placeholder={table.getState().pagination.pageSize} />
               </SelectTrigger>
               <SelectContent side="top">
-                {[10, 20, 50, 100].map((pageSize) => (
+                {[10, 20, 30, 40, 50].map((pageSize) => (
                   <SelectItem key={pageSize} value={`${pageSize}`}>
                     {pageSize}
                   </SelectItem>
